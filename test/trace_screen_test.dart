@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tracear/features/trace/trace_controller.dart';
 import 'package:tracear/features/trace/trace_screen.dart';
 import 'package:tracear/features/trace/widgets/overlay_layer.dart';
+import 'package:tracear/features/trace/widgets/zoom_control.dart';
 import 'package:tracear/models/trace_image.dart';
 import 'package:tracear/models/trace_session.dart';
 import 'package:tracear/providers/app_providers.dart';
@@ -46,6 +47,19 @@ class FakeCameraService implements CameraService {
 
   @override
   Future<void> setFocusAndExposurePoint(Offset normalizedPoint) async {}
+
+  double zoom = 1.0;
+
+  @override
+  double get minZoom => 1.0;
+
+  @override
+  double get maxZoom => 8.0;
+
+  @override
+  Future<void> setZoom(double value) async {
+    zoom = value.clamp(minZoom, maxZoom);
+  }
 
   @override
   Future<void> lockCaptureOrientation(DeviceOrientation orientation) async {}
@@ -175,6 +189,77 @@ void main() {
     await tester.pump();
     overlay = tester.widget<OverlayLayer>(find.byType(OverlayLayer));
     expect(overlay.session.transform.dx, equals(dxAfterDrag));
+
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets('Camera zoom slider zooms, resets, and hides when locked', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final testImg = (await tester.runAsync(_createTestImage))!;
+    final fakeCam = FakeCameraService()..initialized = true;
+
+    final initial = TraceState(
+      image: TraceImage(
+        id: 'zoom-img',
+        source: ImageSource.userPhoto,
+        originalPath: 'orig.png',
+        width: 64,
+        height: 64,
+        lastUsedAt: DateTime(2026),
+      ),
+      session: const TraceSession(imageId: 'zoom-img'),
+      fullImage: testImg,
+      cameraReady: true,
+      zoomMin: 1.0,
+      zoomMax: 8.0,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          cameraServiceProvider.overrideWithValue(fakeCam),
+          traceControllerProvider('zoom-img')
+              .overrideWith(() => FakeTraceController('zoom-img', initial)),
+        ],
+        child: const MaterialApp(home: TraceScreen(imageId: 'zoom-img')),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(ZoomControl), findsOneWidget);
+    expect(find.text('1.0×'), findsOneWidget);
+
+    // Drag the (vertical) slider upward -> zoom in.
+    final slider = find.descendant(
+      of: find.byType(ZoomControl),
+      matching: find.byType(Slider),
+    );
+    await tester.drag(slider, const Offset(0, -60));
+    await tester.pump();
+
+    ZoomControl control() =>
+        tester.widget<ZoomControl>(find.byType(ZoomControl));
+    expect(control().zoom, greaterThan(1.2));
+    expect(fakeCam.zoom, closeTo(control().zoom, 1e-6));
+
+    // Overlay pinch/drag does not change camera zoom and vice versa.
+    final overlay = tester.widget<OverlayLayer>(find.byType(OverlayLayer));
+    expect(overlay.session.transform.scale, equals(1.0));
+
+    // Tap the label -> back to 1×.
+    await tester.tap(find.textContaining('×'));
+    await tester.pump();
+    expect(control().zoom, equals(1.0));
+    expect(fakeCam.zoom, equals(1.0));
+
+    // Locking hides the zoom control.
+    await tester.tap(find.byTooltip('Lock overlay'));
+    await tester.pump();
+    expect(find.byType(ZoomControl), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 600));
   });

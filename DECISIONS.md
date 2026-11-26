@@ -51,3 +51,11 @@ All packages from `SPEC.md` §2.2 were verified on pub.dev as active (not discon
 ## Camera Lifecycle (§4.3)
 - The Trace and Prepare controllers are `autoDispose`, so leaving Trace releases the camera.
 - On `inactive`, a running video is stopped and saved and a timelapse is paused; both resume normally after `resumed`. `inactive` events caused by our own permission dialogs are ignored. All camera-controller calls are serialized.
+
+## Camera zoom (added after the spec)
+
+- Pinch stays on the overlay (spec); camera zoom gets its own vertical slider on the right edge, logarithmic so 1×→2× has as much travel as 4×→8×. Tapping the label resets to 1×.
+- Capped at 8×: beyond that it is digital zoom of noise, useless for tracing.
+- Saved in the session (`cameraZoom`) because the overlay's size/position only lines up with the paper at the zoom it was aligned at; re-applied after every camera re-init (resume, audio re-init).
+- Hidden while locked, for the same reason: zooming after locking would shift the paper under the overlay.
+- Slider updates are coalesced: only the newest requested zoom is sent to the camera once the previous call completes.

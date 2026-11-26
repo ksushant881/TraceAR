@@ -44,10 +44,18 @@ abstract class CameraService {
   bool get isFlashOn;
   bool get isRecordingVideo;
 
+  /// Zoom range supported by the active camera (1.0..1.0 when zoom is not
+  /// supported). Valid after [initialize].
+  double get minZoom;
+  double get maxZoom;
+
   Future<void> initialize({bool enableAudio = false});
   Future<void> dispose();
   Future<void> setFlashOn(bool on);
   Future<void> setFocusAndExposurePoint(Offset normalizedPoint);
+
+  /// Sets the camera zoom, clamped to [minZoom]..[maxZoom].
+  Future<void> setZoom(double zoom);
   Future<void> lockCaptureOrientation(DeviceOrientation orientation);
   Future<void> unlockCaptureOrientation();
   Future<void> startVideoRecording();
@@ -57,8 +65,13 @@ abstract class CameraService {
 }
 
 class DeviceCameraService implements CameraService {
+  /// Digital zoom beyond this only magnifies noise; tracing needs a sharp view.
+  static const double maxUsefulZoom = 8.0;
+
   CameraController? _controller;
   bool _flashOn = false;
+  double _minZoom = 1.0;
+  double _maxZoom = 1.0;
 
   @override
   bool get isInitialized => _controller?.value.isInitialized ?? false;
@@ -71,6 +84,12 @@ class DeviceCameraService implements CameraService {
 
   @override
   bool get isRecordingVideo => _controller?.value.isRecordingVideo ?? false;
+
+  @override
+  double get minZoom => _minZoom;
+
+  @override
+  double get maxZoom => _maxZoom;
 
   @override
   Future<void> initialize({bool enableAudio = false}) async {
@@ -95,6 +114,15 @@ class DeviceCameraService implements CameraService {
     _controller = controller;
     await controller.initialize();
     _flashOn = false;
+    try {
+      final min = await controller.getMinZoomLevel();
+      final max = await controller.getMaxZoomLevel();
+      _minZoom = min;
+      _maxZoom = math.max(min, math.min(max, maxUsefulZoom));
+    } catch (_) {
+      _minZoom = 1.0;
+      _maxZoom = 1.0;
+    }
   }
 
   @override
@@ -102,6 +130,8 @@ class DeviceCameraService implements CameraService {
     final c = _controller;
     _controller = null;
     _flashOn = false;
+    _minZoom = 1.0;
+    _maxZoom = 1.0;
     await c?.dispose();
   }
 
@@ -127,6 +157,13 @@ class DeviceCameraService implements CameraService {
     try {
       await c.setExposurePoint(clamped);
     } catch (_) {}
+  }
+
+  @override
+  Future<void> setZoom(double zoom) async {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized || _maxZoom <= _minZoom) return;
+    await c.setZoomLevel(zoom.clamp(_minZoom, _maxZoom));
   }
 
   @override

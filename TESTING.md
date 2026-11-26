@@ -9,6 +9,9 @@ Run these checks on real Android and iOS devices before shipping:
 
 ## Trace Screen Controls
 - [ ] Pinch zoom, two-finger rotation, and drag move the overlay smoothly at 60 fps; zoom/rotation pivot around the fingers.
+- [ ] Camera zoom: the slider on the right zooms the camera smoothly (1× up to the phone's max, capped at 8×); tapping the "1.0×" label resets it. Pinching still resizes only the overlay.
+- [ ] Camera zoom is hidden while locked, survives leaving/returning to the app and starting a video with audio, and is restored when reopening the same image.
+- [ ] Photos, videos and timelapses are captured at the zoom shown on screen.
 - [ ] Gesture hints appear on entering Trace and after unlocking, and are hidden while locked.
 - [ ] Leaving Trace (back button and system back) turns the camera off (privacy indicator disappears).
 - [ ] Double-tap resets transform when unlocked.

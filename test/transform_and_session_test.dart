@@ -112,6 +112,7 @@ void main() {
           stepCount: 6,
           includeShading: true,
         ),
+        cameraZoom: 2.5,
       );
 
       final encoded = jsonEncode(session.toJson());

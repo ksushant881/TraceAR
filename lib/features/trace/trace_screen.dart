@@ -11,6 +11,7 @@ import 'package:tracear/features/trace/widgets/grid_painter.dart';
 import 'package:tracear/features/trace/widgets/overlay_layer.dart';
 import 'package:tracear/features/trace/widgets/step_bar.dart';
 import 'package:tracear/features/trace/widgets/toolbar.dart';
+import 'package:tracear/features/trace/widgets/zoom_control.dart';
 import 'package:tracear/models/trace_image.dart';
 import 'package:tracear/models/trace_session.dart';
 import 'package:tracear/providers/app_providers.dart';
@@ -255,6 +256,23 @@ class _TraceScreenState extends ConsumerState<TraceScreen>
             right: 24,
             bottom: 200,
             child: IgnorePointer(child: _GestureHints()),
+          ),
+
+        // Camera zoom (right edge). Hidden while locked so the paper can't
+        // shift under an aligned overlay.
+        if (state.cameraReady && state.zoomSupported && !state.session.locked)
+          Positioned(
+            right: 8,
+            top: MediaQuery.paddingOf(context).top + 120,
+            bottom: 190,
+            child: Center(
+              child: ZoomControl(
+                zoom: state.effectiveZoom,
+                minZoom: state.zoomMin,
+                maxZoom: state.zoomMax,
+                onChanged: controller.setCameraZoom,
+              ),
+            ),
           ),
 
         // Top bar: Back + Lock badge + Step bar
@@ -544,7 +562,7 @@ class _GestureHints extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
         ),
         child: const Text(
-          'Drag to move · pinch to zoom · twist to rotate · double-tap to reset',
+          'Drag to move · pinch to resize · twist to rotate · double-tap to reset · slider on the right zooms the camera',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 12, color: Colors.white),
         ),

@@ -124,6 +124,7 @@ class TraceSession {
     this.currentStep = 0,
     this.highlightColor = const Color(0xFF00E5FF),
     this.lineArtParams = const LineArtParams(),
+    this.cameraZoom = 1.0,
   });
 
   final String imageId;
@@ -138,6 +139,11 @@ class TraceSession {
   final Color highlightColor;
   final LineArtParams lineArtParams;
 
+  /// Requested camera zoom (1.0 = no zoom). Saved with the session because
+  /// the overlay alignment depends on it. Clamped to the device's range
+  /// when applied.
+  final double cameraZoom;
+
   TraceSession copyWith({
     String? imageId,
     DrawMode? mode,
@@ -150,6 +156,7 @@ class TraceSession {
     int? currentStep,
     Color? highlightColor,
     LineArtParams? lineArtParams,
+    double? cameraZoom,
   }) {
     return TraceSession(
       imageId: imageId ?? this.imageId,
@@ -163,6 +170,7 @@ class TraceSession {
       currentStep: currentStep ?? this.currentStep,
       highlightColor: highlightColor ?? this.highlightColor,
       lineArtParams: lineArtParams ?? this.lineArtParams,
+      cameraZoom: cameraZoom ?? this.cameraZoom,
     );
   }
 
@@ -178,6 +186,7 @@ class TraceSession {
     'currentStep': currentStep,
     'highlightColor': highlightColor.toARGB32(),
     'lineArtParams': lineArtParams.toJson(),
+    'cameraZoom': cameraZoom,
   };
 
   factory TraceSession.fromJson(Map<String, dynamic> json) {
@@ -199,6 +208,7 @@ class TraceSession {
               json['lineArtParams'] as Map<String, dynamic>,
             )
           : const LineArtParams(),
+      cameraZoom: (json['cameraZoom'] as num?)?.toDouble() ?? 1.0,
     );
   }
 
@@ -216,7 +226,8 @@ class TraceSession {
           gridOn == other.gridOn &&
           currentStep == other.currentStep &&
           highlightColor == other.highlightColor &&
-          lineArtParams == other.lineArtParams;
+          lineArtParams == other.lineArtParams &&
+          cameraZoom == other.cameraZoom;
 
   @override
   int get hashCode => Object.hash(
@@ -231,5 +242,6 @@ class TraceSession {
     currentStep,
     highlightColor,
     lineArtParams,
+    cameraZoom,
   );
 }

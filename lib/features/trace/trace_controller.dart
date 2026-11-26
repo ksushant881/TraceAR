@@ -25,6 +25,8 @@ class TraceState {
     this.permissionPermanentlyDenied = false,
     this.cameraError,
     this.flashOn = false,
+    this.zoomMin = 1.0,
+    this.zoomMax = 1.0,
     this.hideImage = false,
     this.showFullPicture = false,
     this.recordingKind = RecordingKind.none,
@@ -44,6 +46,10 @@ class TraceState {
   final bool permissionPermanentlyDenied;
   final String? cameraError;
   final bool flashOn;
+
+  /// Zoom range of the active camera; equal when zoom is unsupported.
+  final double zoomMin;
+  final double zoomMax;
   final bool hideImage;
   final bool showFullPicture;
   final RecordingKind recordingKind;
@@ -58,6 +64,11 @@ class TraceState {
 
   int get totalSteps => stepImages.length;
 
+  bool get zoomSupported => zoomMax > zoomMin + 0.01;
+
+  /// The zoom actually in effect: the saved zoom clamped to this camera.
+  double get effectiveZoom => session.cameraZoom.clamp(zoomMin, zoomMax);
+
   TraceState copyWith({
     TraceImage? image,
     TraceSession? session,
@@ -69,6 +80,8 @@ class TraceState {
     String? cameraError,
     bool clearCameraError = false,
     bool? flashOn,
+    double? zoomMin,
+    double? zoomMax,
     bool? hideImage,
     bool? showFullPicture,
     RecordingKind? recordingKind,
@@ -90,6 +103,8 @@ class TraceState {
           permissionPermanentlyDenied ?? this.permissionPermanentlyDenied,
       cameraError: clearCameraError ? null : (cameraError ?? this.cameraError),
       flashOn: flashOn ?? this.flashOn,
+      zoomMin: zoomMin ?? this.zoomMin,
+      zoomMax: zoomMax ?? this.zoomMax,
       hideImage: hideImage ?? this.hideImage,
       showFullPicture: showFullPicture ?? this.showFullPicture,
       recordingKind: recordingKind ?? this.recordingKind,
@@ -131,6 +146,11 @@ class TraceController extends AsyncNotifier<TraceState> {
   /// True after the camera was released because the app went `inactive`.
   /// Only then does `resumed` re-create it.
   bool _cameraSuspended = false;
+
+  /// Latest zoom requested while a zoom change is still being applied.
+  /// Slider drags fire many updates; only the newest one is sent.
+  double? _zoomTarget;
+  bool _zoomApplying = false;
 
   CameraService get _camera => ref.read(cameraServiceProvider);
   SessionStore get _sessionStore => ref.read(sessionStoreProvider);
@@ -196,7 +216,7 @@ class TraceController extends AsyncNotifier<TraceState> {
       stepSet: stepResult.stepSet,
     );
 
-    final cam = await _initCamera();
+    final cam = await _initCamera(zoom: clampedSession.cameraZoom);
     return _applyCameraInit(initial, cam);
   }
 
@@ -299,6 +319,7 @@ class TraceController extends AsyncNotifier<TraceState> {
     bool enableAudio = false,
     bool requestPermission = true,
     bool restoreTorch = false,
+    double? zoom,
   }) async {
     if (requestPermission) {
       try {
@@ -325,6 +346,7 @@ class TraceController extends AsyncNotifier<TraceState> {
     }
     final cam = _camera;
     final landscapeAllowed = ref.read(settingsProvider).landscapeAllowed;
+    final targetZoom = zoom ?? state.value?.session.cameraZoom ?? 1.0;
     try {
       await _serialCamera(() async {
         await cam.initialize(enableAudio: enableAudio);
@@ -334,6 +356,9 @@ class TraceController extends AsyncNotifier<TraceState> {
         if (restoreTorch) {
           await cam.setFlashOn(true);
         }
+        try {
+          await cam.setZoom(targetZoom);
+        } catch (_) {}
       });
       return (ready: true, permanentlyDenied: false, error: null);
     } catch (e) {
@@ -347,8 +372,11 @@ class TraceController extends AsyncNotifier<TraceState> {
 
   TraceState _applyCameraInit(TraceState s, _CameraInit r) {
     if (r.ready) {
+      final cam = _camera;
       return s.copyWith(
         cameraReady: true,
+        zoomMin: cam.minZoom,
+        zoomMax: cam.maxZoom,
         permissionPermanentlyDenied: false,
         clearCameraError: true,
       );
@@ -518,6 +546,37 @@ class TraceController extends AsyncNotifier<TraceState> {
       _emit((s) => s.copyWith(flashOn: next));
     } catch (e) {
       _status('Flashlight unavailable: $e');
+    }
+  }
+
+  /// Changes the camera zoom. Disabled while locked: zooming would move the
+  /// paper relative to the already-aligned overlay.
+  void setCameraZoom(double zoom) {
+    final current = state.value;
+    if (current == null ||
+        current.session.locked ||
+        !current.cameraReady ||
+        !current.zoomSupported) {
+      return;
+    }
+    final clamped = zoom.clamp(current.zoomMin, current.zoomMax);
+    _updateSession(current.session.copyWith(cameraZoom: clamped));
+    _zoomTarget = clamped;
+    if (!_zoomApplying) unawaited(_drainZoom());
+  }
+
+  Future<void> _drainZoom() async {
+    _zoomApplying = true;
+    final cam = _camera;
+    try {
+      while (_zoomTarget != null && ref.mounted) {
+        final target = _zoomTarget!;
+        _zoomTarget = null;
+        await _serialCamera(() => cam.setZoom(target))
+            .catchError((Object _) {});
+      }
+    } finally {
+      _zoomApplying = false;
     }
   }
 
