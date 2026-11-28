@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tracear/features/trace/trace_controller.dart';
 import 'package:tracear/features/trace/trace_screen.dart';
 import 'package:tracear/features/trace/widgets/overlay_layer.dart';
+import 'package:tracear/features/trace/widgets/toolbar.dart';
 import 'package:tracear/features/trace/widgets/zoom_control.dart';
 import 'package:tracear/models/trace_image.dart';
 import 'package:tracear/models/trace_session.dart';
@@ -190,7 +191,26 @@ void main() {
     overlay = tester.widget<OverlayLayer>(find.byType(OverlayLayer));
     expect(overlay.session.transform.dx, equals(dxAfterDrag));
 
-    await tester.pump(const Duration(milliseconds: 600));
+    // A plain tap on the lock explains how to unlock and stays locked.
+    final unlock = find.descendant(
+      of: find.byType(TraceToolbar),
+      matching: find.byIcon(Icons.lock),
+    );
+    await tester.tap(unlock);
+    await tester.pump();
+    expect(find.text('Press and hold the lock to unlock'), findsOneWidget);
+    expect(find.text('Locked'), findsOneWidget);
+
+    // Long-press unlocks, and gestures move the overlay again.
+    await tester.longPress(unlock);
+    await tester.pump();
+    expect(find.text('Locked'), findsNothing);
+    await tester.drag(find.byType(OverlayLayer), const Offset(30, 0));
+    await tester.pump();
+    overlay = tester.widget<OverlayLayer>(find.byType(OverlayLayer));
+    expect(overlay.session.transform.dx, isNot(equals(dxAfterDrag)));
+
+    await tester.pump(const Duration(seconds: 5));
   });
 
   testWidgets('Camera zoom slider zooms, resets, and hides when locked', (

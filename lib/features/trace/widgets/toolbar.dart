@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:tracear/features/trace/trace_controller.dart';
 import 'package:tracear/models/trace_image.dart';
@@ -77,19 +78,17 @@ class TraceToolbar extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  GestureDetector(
-                    onLongPress: session.locked ? onUnlockLongPress : null,
-                    child: IconButton(
-                      icon: Icon(
-                        session.locked ? Icons.lock : Icons.lock_open,
-                        color: session.locked ? cs.secondary : null,
-                      ),
-                      tooltip: session.locked
-                          ? 'Long press to unlock'
-                          : 'Lock overlay',
-                      onPressed: session.locked ? null : onToggleLock,
+                  if (session.locked)
+                    _LockedButton(
+                      color: cs.secondary,
+                      onUnlock: onUnlockLongPress,
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(Icons.lock_open),
+                      tooltip: 'Lock overlay',
+                      onPressed: onToggleLock,
                     ),
-                  ),
                   IconButton(
                     icon: Icon(
                       Icons.flip,
@@ -187,6 +186,49 @@ class TraceToolbar extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Lock button while locked: long-press unlocks, a tap explains how.
+///
+/// Deliberately not an [IconButton]: its [Tooltip] claims the long-press on
+/// touch screens, so a long-press only showed the tooltip and never unlocked.
+class _LockedButton extends StatelessWidget {
+  const _LockedButton({required this.color, required this.onUnlock});
+
+  final Color color;
+  final VoidCallback onUnlock;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Locked. Long press to unlock',
+      onLongPress: onUnlock,
+      child: InkResponse(
+        key: const ValueKey('unlock-button'),
+        radius: 24,
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          onUnlock();
+        },
+        onTap: () {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(
+                content: Text('Press and hold the lock to unlock'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+        },
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Icon(Icons.lock, color: color),
         ),
       ),
     );
